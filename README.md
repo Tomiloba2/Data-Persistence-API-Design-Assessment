@@ -1,44 +1,106 @@
-# Profile Aggregation API
+# Profile Intelligence Service API
 
-A RESTful API that aggregates user profile data from multiple external services, applies business logic, and persists the result in a database.
+A RESTful backend service that aggregates data from multiple external APIs, processes and classifies it, persists it in a database, and exposes endpoints for retrieval and management.
 
 ---
 
-## Overview
+##  Overview
 
-This API exposes a single **POST endpoint** that:
+This API is designed to:
 
-* Accepts a `name`
-* Calls three external APIs:
-
-  * Genderize
-  * Agify
-  * Nationalize
-* Processes and classifies the data
-* Stores the result in a database
-* Ensures **idempotency** (no duplicate records for the same name)
+* Integrate with multiple third-party APIs
+* Process and normalize external data
+* Store structured profile data in a database
+* Provide clean and consistent RESTful endpoints
+* Handle duplicate submissions using idempotency
 
 ---
 
 ##  Base URL
 
-```
-https://your-api-domain.com
+```id="b6c1ks"
+https://data-persistence-api-design-assessment-production.up.railway.app
 ```
 
 ---
 
-##  Endpoint
+##  External APIs Used
 
-### Create Profile
+* Genderize → https://api.genderize.io?name={name}
+* Agify → https://api.agify.io?name={name}
+* Nationalize → https://api.nationalize.io?name={name}
+
+---
+
+##  Data Processing Rules
+
+###  Genderize
+
+* Extract:
+
+  * `gender`
+  * `probability` → `gender_probability`
+  * `count` → `sample_size`
+
+---
+
+###  Agify
+
+* Extract:
+
+  * `age`
+* Compute `age_group`:
+
+  * `0–12` → child
+  * `13–19` → teenager
+  * `20–59` → adult
+  * `60+` → senior
+
+---
+
+###  Nationalize
+
+* Extract:
+
+  * Country list
+* Select:
+
+  * Country with highest probability
+* Return:
+
+  * `country_id`
+  * `country_probability`
+
+---
+
+### Stored Fields
+
+Each profile contains:
+
+* `id` → UUID v7
+* `name`
+* `gender`
+* `gender_probability`
+* `sample_size`
+* `age`
+* `age_group`
+* `country_id`
+* `country_probability`
+* `created_at` → UTC ISO 8601
+
+---
+
+## API Endpoints
+
+---
+
+###  Create Profile
 
 **POST** `/api/profiles`
 
----
+#### Request Body
 
-##  Request Body
-
-```json
+```json id="u9v0cu"
 {
   "name": "ella"
 }
@@ -46,9 +108,9 @@ https://your-api-domain.com
 
 ---
 
-##  Success Response (200 OK)
+###  Success Response (201)
 
-```json
+```json id="axv9yz"
 {
   "status": "success",
   "data": {
@@ -68,17 +130,15 @@ https://your-api-domain.com
 
 ---
 
-##  Idempotency Behavior
+###  Idempotency
 
-If the same name is submitted more than once:
+If the same name is submitted again:
 
-```json
+```json id="7y6l5u"
 {
   "status": "success",
   "message": "Profile already exists",
-  "data": {
-    "...existing record..."
-  }
+  "data": { "...existing profile..." }
 }
 ```
 
@@ -87,61 +147,94 @@ If the same name is submitted more than once:
 
 ---
 
-##  Data Processing Rules
+###  Get Profile by ID
 
-### 1. Genderize API
+**GET** `/api/profiles/{id}`
 
-* Extract:
+####  Success Response (200)
 
-  * `gender`
-  * `probability` → `gender_probability`
-  * `count` → `sample_size`
-
----
-
-### 2. Agify API
-
-* Extract:
-
-  * `age`
-* Classify `age_group`:
-
-  * `0–12` → child
-  * `13–19` → teenager
-  * `20–59` → adult
-  * `60+` → senior
-
----
-
-### 3. Nationalize API
-
-* Extract:
-
-  * Country list
-* Select:
-
-  * Country with **highest probability**
-* Return:
-
-  * `country_id`
-  * `country_probability`
+```json id="mpdztk"
+{
+  "status": "success",
+  "data": {
+    "id": "b3f9c1e2-7d4a-4c91-9c2a-1f0a8e5b6d12",
+    "name": "emmanuel",
+    "gender": "male",
+    "gender_probability": 0.99,
+    "sample_size": 1234,
+    "age": 25,
+    "age_group": "adult",
+    "country_id": "NG",
+    "country_probability": 0.85,
+    "created_at": "2026-04-01T12:00:00Z"
+  }
+}
+```
 
 ---
 
-##  Data Persistence
+###  Get All Profiles (with Filters)
 
-Each processed profile is stored with:
+**GET** `/api/profiles`
 
-* `id` → UUID v7
-* `created_at` → UTC timestamp (ISO 8601)
+#### Optional Query Parameters (case-insensitive):
+
+* `gender`
+* `country_id`
+* `age_group`
+
+#### Example:
+
+```id="z1sjp6"
+/api/profiles?gender=male&country_id=NG
+```
+
+---
+
+###  Success Response (200)
+
+```json id="gq6kwh"
+{
+  "status": "success",
+  "count": 2,
+  "data": [
+    {
+      "id": "id-1",
+      "name": "emmanuel",
+      "gender": "male",
+      "age": 25,
+      "age_group": "adult",
+      "country_id": "NG"
+    },
+    {
+      "id": "id-2",
+      "name": "sarah",
+      "gender": "female",
+      "age": 28,
+      "age_group": "adult",
+      "country_id": "US"
+    }
+  ]
+}
+```
+
+---
+
+###  Delete Profile
+
+**DELETE** `/api/profiles/{id}`
+
+#### Success Response
+
+* `204 No Content`
 
 ---
 
 ##  Error Handling
 
-All errors follow this structure:
+All errors follow this format:
 
-```json
+```json id="n7m5n0"
 {
   "status": "error",
   "message": "<error message>"
@@ -150,20 +243,21 @@ All errors follow this structure:
 
 ---
 
-##  Error Cases
+###  Error Types
 
-| Status Code | Condition                        |
-| ----------- | -------------------------------- |
-| 400         | Missing or empty `name`          |
-| 422         | `name` is not a string           |
-| 404         | No valid data from external APIs |
-| 500 / 502   | External API or server failure   |
+| Status Code | Condition               |
+| ----------- | ----------------------- |
+| 400         | Missing or empty `name` |
+| 422         | Invalid input type      |
+| 404         | Profile not found       |
+| 500         | Internal server error   |
+| 502         | External API failure    |
 
 ---
 
-##  Edge Cases
+##  External API Edge Cases
 
-Data is not stored if any of the following occurs:
+Return `502` and DO NOT store data if:
 
 * Genderize:
 
@@ -176,14 +270,16 @@ Data is not stored if any of the following occurs:
 
 * Nationalize:
 
-  * No country data returned
+  * No country data
 
-Response:
+---
 
-```json
+### Example:
+
+```json id="s0cxr9"
 {
   "status": "error",
-  "message": "No valid prediction available for the provided name"
+  "message": "Genderize returned an invalid response"
 }
 ```
 
@@ -191,29 +287,26 @@ Response:
 
 ##  CORS Configuration
 
-The API includes:
-
-```
+```id="d4vjlwm"
 Access-Control-Allow-Origin: *
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 
-*  Typescript/Node.js /Express
-* HTTP client (fetch)
-* Database (PostgreSQL)
-* UUID v7 generation library
+* Backend: Typescript/Node.js/Express
+* Database: PostgreSQL
+* ORM: Prisma
+* HTTP Client: fetch
+* UUID v7 library
 
 ---
 
-## Testing
-
 ### cURL Example
 
-```bash
+```bash id="f9xxeh"
 curl -X POST https://your-api-domain.com/api/profiles \
   -H "Content-Type: application/json" \
   -d '{"name": "ella"}'
@@ -221,9 +314,9 @@ curl -X POST https://your-api-domain.com/api/profiles \
 
 ---
 
-## Installation (Optional)
+##  Installation (Optional)
 
-```bash
+```bash id="0sbf2o"
 git clone https://github.com/Tomiloba2/Data-Persistence-API-Design-Assessment.git
 cd your-repo
 npm install
@@ -232,7 +325,8 @@ npm run start
 
 ---
 
-## Author
+
+##  Author
 
 Tomiloba
 GitHub: https://github.com/tomiloba2
